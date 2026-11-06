@@ -46,3 +46,4 @@ parity-test: dos lab
 parity-2716: dos lab
 	@test -n "$(CORE)" || { echo 'Set CORE to the extracted Phyton 2.77 Core directory'; exit 2; }
 	python3 tests/2716-parity.py "$(CORE)" $(if $(IMAGE),--image "$(IMAGE)")
+	python3 tests/small-boundary.py "$(CORE)"

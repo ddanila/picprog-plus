@@ -20,6 +20,7 @@ static unsigned char *chip, reg[16];
 static unsigned capacity;
 static int pulse_fault, empty_socket;
 static int device_phase;
+static unsigned stuck_address, stuck_mask;
 static unsigned drop_pulses; /* Optional fault injection; counts qualified pulses only. */
 static unsigned address(void) {
     return reg[2] | (reg[3] << 4) | (reg[13] << 8) | ((reg[14] & 3) << 12);
@@ -33,7 +34,8 @@ static void latch(unsigned char bus) {
         if (pulse_fault) { /* Hardware status fault, no successful pulse. */ }
         else if (drop_pulses) --drop_pulses;
         else if (capacity > RF5_BYTES) chip[address() & (capacity-1)] &= reg[0] | (reg[1] << 4);
-        else rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4), true, true, RF5_PROGRAM_US);
+        else rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4) |
+                (rf5_address(address()) == stuck_address ? stuck_mask : 0), true, true, RF5_PROGRAM_US);
     }
     reg[index] = value;
 }
@@ -79,6 +81,14 @@ __attribute__((constructor)) static void setup(void) {
         }
         capacity = st.st_size;
         close(fd);
+    }
+    const char *stuck = getenv("PP_STUCK_CELL");
+    if (stuck) {
+        char extra;
+        if (capacity != RF5_BYTES || sscanf(stuck,"%x:%x%c",&stuck_address,&stuck_mask,&extra)!=2 ||
+            stuck_address >= RF5_BYTES || !stuck_mask || stuck_mask > 255) {
+            fprintf(stderr,"PP_STUCK_CELL expects hex address:mask on a 2 KiB EPROM\n"); _exit(2);
+        }
     }
     empty_socket = getenv("PP_EMPTY_SOCKET") && atoi(getenv("PP_EMPTY_SOCKET"));
     pulse_fault = getenv("PP_PULSE_FAULT") && atoi(getenv("PP_PULSE_FAULT"));

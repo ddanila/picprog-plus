@@ -56,3 +56,16 @@ make parity-2716 CORE=/path/to/Core IMAGE=/path/to/2048-byte-rom.bin
 ```
 
 The optional IMAGE is copied into temporary fixtures. We used the [MB002 inventory acquisition](https://github.com/ddanila/vintage-computer-inventory/blob/main/items/MB002-robotron-pc1715/BENCH.md), SHA-256 `51cb80639b5667f2611da71ce7305061566cf3474bda7db6fc82709d08e46d01`. Its exact chip marking is unconfirmed. The full-image READ and VERIFY matched at 266,640 events each. WRITE onto erased cells matched at 382,068 and OVERWRITE onto partially programmed cells at 402,774; both resulting images matched the acquisition byte-for-byte. CHECK used a blank image. The ROM was not redistributed or re-read from hardware.
+
+### Partial writes and defective cells
+
+The default WRITE and OVERWRITE both scan beyond 07FFh for a 257-byte
+request starting at 06FFh. With 11 socket address bits the padding aliases
+cell 0000h. A nonblank sentinel there leaves the requested bytes programmed
+but causes retry exhaustion at bus address 0800h. The sentinel is unchanged.
+On an 8 KiB control chip the same sentinel does not interfere. Single-byte
+and aligned 256-byte requests ending at 07FFh complete normally.
+`make parity-2716` includes these comparisons and a partially programmable
+cell. Set `PP_STUCK_CELL=7fb:01` to inhibit clearing bit zero at physical
+address 07FBh in the EPROM model. It affects the stored byte only; all
+readbacks use actual cell contents.
