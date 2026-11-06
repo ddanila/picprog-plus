@@ -1,6 +1,6 @@
 # Phyton PicProg+ for DOSRAVI
 
-An independent start on a DOS driver for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. The programmer protocol is still unknown. **No chip read, erase, programming or voltage selection is implemented or hardware verified.** This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
+An independent start on a DOS driver for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. The first initialization exchange has been reproduced in emulation; the rest of the programmer protocol is unresolved. **No chip read, erase, programming or voltage selection is implemented or hardware verified.** This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
 
 ## Try the host-side check
 
@@ -16,6 +16,10 @@ dosravi --serial /dev/ttyUSB0 --baud 57600 run \
 You can do this with the programmer disconnected. PPPORTS lists the first three BIOS LPT entries and samples the raw status register once at each conventional base address. It doesn't write to the port. An entry confirms the host BIOS configured a port; neither its address nor its status byte identifies a PicProg+. Zero means the BIOS entry was empty.
 
 `make test` runs the trace comparison tests. `tests/dosravi-smoke.sh` exercises the actual COM binary via an emulated serial connection and DOSRAVI. It needs DOSBox-X, the installed DOSRAVI Python dependencies and a built DOSRAVI.COM in a sibling dosravi checkout (or set DOSRAVI_DIR). In our DOSBox-X run, the child exited with code 0 and reported LPT1 at 0378 and empty LPT2/3 entries. This tests transport, not electrical behavior.
+
+## Virtual programmer lab
+
+The [Linux virtual LPT lab](docs/virtual-lpt.md) records what the original DOS program writes and can vary the replies without a programmer. A synthetic response passes its first handshake check; the subsequent self-check still fails.
 
 ## Where to take the first capture
 
