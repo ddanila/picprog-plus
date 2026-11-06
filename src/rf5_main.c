@@ -41,13 +41,30 @@ static int number(char *text, unsigned *result)
     return 1;
 }
 
+/* Native 2716-family selections absent from the 2.77 catalog. Include
+ * the DOS CP866 spellings, not UTF-8, in guest comparisons. */
+static int unavailable(char *profile)
+{
+    static char *names[] = { "2716", "U2716C35", "RF2", "RF5", "K573RF2",
+        "K573RF5", "\212573\220\2242", "\212573\220\2245", "\220\2242", "\220\2245", 0 };
+    unsigned i,n;
+    for (i=0; names[i]; ++i) {
+        n = strlen(names[i]);
+        if (!strncmp(profile,names[i],n) &&
+            (!strcmp(profile+n,",I") || !strcmp(profile+n,",Q"))) return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     unsigned capacity = 8192, port, a, start = 0, length = RF5_SIZE;
-    int action, rc = 1, batch = 0, intelligent = 0;
+    int action, rc = 1, batch = 0, intelligent = 0, selection = 1;
     FILE *f;
     if (argc == 8) {
-        if (!strcmp(argv[7],"27C128,I") || !strcmp(argv[7],"27C128,Q")) capacity = 16384;
+        if (!strcmp(argv[7],"DEFAULT")) selection = 0;
+        else if (unavailable(argv[7])) selection = -1;
+        else if (!strcmp(argv[7],"27C128,I") || !strcmp(argv[7],"27C128,Q")) capacity = 16384;
         else if (strcmp(argv[7],"27C64,I") && strcmp(argv[7],"27C64,Q")) goto usage;
         intelligent = argv[7][strlen(argv[7])-1] == 'I';
         --argc;
@@ -63,21 +80,24 @@ int main(int argc, char **argv)
     else if (argc >= 5 && !strcmp(argv[1], "OVERWRITE")) { batch = 1; action = 3; }
     else goto usage;
     if (argc == 7 && (!batch || !number(argv[5], &start) || !number(argv[6], &length) ||
-                      !length || start + length > capacity)) goto usage;
+                      !length || (selection != 0 && start + length > capacity))) goto usage;
+    if (!selection && start + length > RF5_SIZE) selection = -2;
     if (!strcmp(argv[3], "378")) port = 0x378;
     else if (!strcmp(argv[3], "278")) port = 0x278;
     else if (!strcmp(argv[3], "3BC")) port = 0x3bc;
     else goto usage;
 
-    f = action == 4 ? NULL : fopen(argv[2], "rb");
-    if (!action) {
-        if (f) { fclose(f); puts("Read destination exists"); return 1; }
-    } else if (action != 4) {
-        if (!f) { puts("Cannot open input"); return 1; }
-        if (fread(image, 1, length, f) != length || getc(f) != EOF || ferror(f)) {
-            fclose(f); printf("Expected exactly %u bytes\n",length); return 1;
+    if (selection >= 0) {
+        f = action == 4 ? NULL : fopen(argv[2], "rb");
+        if (!action) {
+            if (f) { fclose(f); puts("Read destination exists"); return 1; }
+        } else if (action != 4) {
+            if (!f) { puts("Cannot open input"); return 1; }
+            if (fread(image, 1, length, f) != length || getc(f) != EOF || ferror(f)) {
+                fclose(f); printf("Expected exactly %u bytes\n",length); return 1;
+            }
+            fclose(f);
         }
-        fclose(f);
     }
     if (argc >= 5) {
         f = fopen(argv[4], "rb");
@@ -91,8 +111,12 @@ int main(int argc, char **argv)
     }
     pp_base(port);
     if (!pp_batch_start(argc >= 5 ? config[0] : NULL,
-                        argc >= 5 ? config[1] : NULL)) {
+                        argc >= 5 ? config[1] : NULL, selection)) {
         puts("Configuration, ID or socket check failed"); return 1;
+    }
+    if (selection < 0) {
+        puts(selection == -2 ? "PROM address outside default range" : "Invalid ROM type (PicProg 2.77)");
+        return 1;
     }
     rc = pp_batch_transfer(image, action, &a, start, length, intelligent);
     pp_batch_end(rc == 1);

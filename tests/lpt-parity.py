@@ -17,7 +17,7 @@ from rf5_client_lab import client
 from rf5_lab import run_guest
 
 
-def reference(core, chip, op, start, length, file, trace, failure=False, profile='27C64,Q'):
+def reference(core, chip, op, start, length, file, trace, failure=False, profile='27C64,Q', omit_range=False):
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         d = root / 'drive'
@@ -25,12 +25,13 @@ def reference(core, chip, op, start, length, file, trace, failure=False, profile
         for name in ('picprog.exe', 'picprog.ovl', 'picprog.lib', 'picprog.cfg'):
             src, = (p for p in core.iterdir() if p.name.lower() == name)
             shutil.copyfile(src, d / name.upper())
-        batch = ['MESSAGE ON', f'SET_ROM_TYPE({profile})']
+        batch = ['MESSAGE ON']
+        if profile != 'DEFAULT': batch.append(f'SET_ROM_TYPE({profile})')
         if op in ('VERIFY', 'WRITE', 'OVERWRITE'):
             shutil.copyfile(file, d / 'IMAGE.BIN')
             batch.append('LOAD("IMAGE.BIN",BIN)')
         args = f'{start},{start+length-1}' if op == 'CHECK' else f'0,{length-1},{start},0'
-        batch.append(f'{op}({args})')
+        batch.append(f'{op}({args if not omit_range else ""})')
         if op == 'READ':
             batch.append(f'SAVE("IMAGE.BIN",BIN,0,0,{length-1})')
         batch += ['PRINT "PARITY-COMPLETE"', 'END']
@@ -53,7 +54,7 @@ def reference(core, chip, op, start, length, file, trace, failure=False, profile
             file.write_bytes((d / 'IMAGE.BIN').read_bytes())
 
 
-def case(core, op, start, length, seed, capacity=2048, profile='27C64,Q'):
+def case(core, op, start, length, seed, capacity=2048, profile='27C64,Q', payload=None, omit_range=False):
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         chip, file = d/'chip', d/'file'
@@ -67,13 +68,21 @@ def case(core, op, start, length, seed, capacity=2048, profile='27C64,Q'):
         segment = before[start:start+length]
         target = (random.Random(seed+1).randbytes(length) if op == 'WRITE'
                   else bytes(x & 0x55 for x in segment) if op == 'OVERWRITE' else segment)
+        if payload is not None:
+            if start or length != capacity or len(payload) != capacity:
+                raise ValueError('payload must cover the entire chip')
+            if op in ('VERIFY','READ'): before = target = segment = payload
+            if op == 'WRITE': target = payload
+            if op == 'OVERWRITE':
+                before = bytes(x | 0x55 for x in payload)
+                target = payload
         expected = before[:start] + target + before[start+length:]
         for i, trace in enumerate((d/'original', d/'ours')):
             chip.write_bytes(before)
             if file.exists(): file.unlink()
             if op not in ('READ','CHECK'): file.write_bytes(target)
             if not i:
-                reference(core,chip,op,start,length,file,trace,profile=profile)
+                reference(core,chip,op,start,length,file,trace,profile=profile,omit_range=omit_range)
             else:
                 lib, = (p for p in core.iterdir() if p.name.lower() == 'picprog.lib')
                 client(chip,op,file,lib,trace,start,length,profile)

@@ -33,3 +33,26 @@ python3 tests/rf5-roundtrip.py /path/to/Core
 ```
 
 This reads an independently seeded chip, programs a fresh erased chip with a different deterministic image, and compares a fresh-session DOS read and the full backing file with that input. It also programs across 00FFh/0100h, checks the neighbors, and rejects impossible and out-of-range writes. The golden 2 KiB input and the verified full readback have SHA-256 `139c58631e4784e1829c6e9dfa0c7dbb9e67f8c3ed51f2526bc3f12b60fc2850`.
+
+## What the original does for 2716, РФ2 and РФ5
+
+There are two different paths in the [Phyton DOS release](vendor.md). The bundled manual calls 2716 the *batch default*. That does not mean that 2716 is a selectable device. With the shipped PICPROG.CFG (SHA-256 `02f6561e055b88393a23929ee71034c20fcd4c25a8f0036ae8f93de58f3047ec`), we observed:
+
+| Original batch | Observed result |
+|---|---|
+| No SET_ROM_TYPE; READ, VERIFY, CHECK, WRITE or OVERWRITE over 0000h–07FFh | All five completed on the 2 KiB virtual adapter. The independent client's `DEFAULT` mode matches every ppdev event, including startup and shutdown. |
+| No SET_ROM_TYPE; READ across 07FFh into 0800h | The interpreter reported the PROM range error before the read, even with an 8 KiB device attached in the lab. |
+| SET_ROM_TYPE with 2716,I; 2716,Q; U2716C35,I; K573RF2,I; K573RF5,I | Invalid ROM type. The trace is identical to an empty batch: 241,417 startup events, then no chip operation. |
+| CP866 К573РФ2,I; К573РФ5,I; РФ2,I; РФ5,I | Same startup trace; no dump or chip change within 20 seconds. No confirmed error message from Phyton for these spellings. PICRF5 returns an error instead of waiting. |
+
+A bare `READ()` with neither a device selection nor an address range also reads exactly 2,048 bytes. The default path loads the startup and operating streams once each. Explicitly selecting 27C64,Q loads the operating stream a second time. While running at its 2 KiB batch default, 2.77 still drives the observed Quick-Pulse hardware interface. Neither this traffic nor a successful virtual read establishes socket routing, VPP or a programming pulse for a physical 2716, РФ2 or РФ5.
+
+To reproduce the default in the **virtual lab**:
+
+```sh
+make dos lab
+python3 tools/rf5_client_lab.py chip.bin READ dump.bin --library /path/to/Core/picprog.lib --profile DEFAULT
+make parity-2716 CORE=/path/to/Core IMAGE=/path/to/2048-byte-rom.bin
+```
+
+The optional IMAGE is copied into temporary fixtures. We used the [MB002 inventory acquisition](https://github.com/ddanila/vintage-computer-inventory/blob/main/items/MB002-robotron-pc1715/BENCH.md), SHA-256 `51cb80639b5667f2611da71ce7305061566cf3474bda7db6fc82709d08e46d01`. Its exact chip marking is unconfirmed. The full-image READ and VERIFY matched at 266,640 events each. WRITE onto erased cells matched at 382,068 and OVERWRITE onto partially programmed cells at 402,774; both resulting images matched the acquisition byte-for-byte. CHECK used a blank image. The ROM was not redistributed or re-read from hardware.

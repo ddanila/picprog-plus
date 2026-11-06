@@ -159,7 +159,7 @@ static void socket_setup(void)
 }
 static unsigned bus_read(void);
 
-int pp_batch_start(unsigned char *startup, unsigned char *parallel)
+int pp_batch_start(unsigned char *startup, unsigned char *parallel, int selection)
 {
     unsigned n, value = 0x31, sense = 0;
     unsigned pullup, pulldown;
@@ -170,6 +170,8 @@ int pp_batch_start(unsigned char *startup, unsigned char *parallel)
     if (!calibrate()) return 0;
     if (!stream(parallel) || !pair_id(15,12,7)) goto unlink;
     reset_profile(1); park_profile();
+    if (selection < 0) return 1; /* rejected before socket setup */
+    if (!selection) goto configured; /* batch kept the startup profile */
     /* The batch's explicit SET_ROM_TYPE re-loads the selected profile. */
     if (!stream(parallel) || !pair_id(15,12,7)) goto unlink;
     reset_profile(0); park_profile();
