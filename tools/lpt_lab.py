@@ -31,7 +31,7 @@ def run(core, trace, status, mapping, seconds, help_only, echo_de):
         box = root / 'dosbox-x'
         shutil.copy(shutil.which('dosbox-x') or '/usr/bin/dosbox-x', box)
         env = dict(os.environ, PP_ENDPOINT=str(endpoint), PP_TRACE=str(trace),
-                   PP_STATUS=hex(status), PP_MAP=mapping, PP_ECHO_DE=str(int(echo_de)), LD_PRELOAD=str(lib),
+                   PP_RF5_IMAGE='', PP_STATUS=hex(status), PP_MAP=mapping, PP_ECHO_DE=str(int(echo_de)), LD_PRELOAD=str(lib),
                    SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
         cmd = [str(box), '-silent', '-fastlaunch']
         for setting in ('dosbox machine=cga', 'dosbox allow more than 640kb base memory=true',

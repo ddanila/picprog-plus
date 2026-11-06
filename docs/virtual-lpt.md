@@ -39,7 +39,7 @@ In the user's Sourcer v8 listing for the identified DOS EXE, several relevant ro
 
 * On a read, the software writes a selector to the data register, samples base+1, and uses bits 7–4 of the last status sample. At the first ID check, 06 supplies the high nibble and 05 the low nibble. The assembled byte must equal the selected descriptor's ID, F0 in the initial mode. After a mismatch the second attempt uses ten samples per selector; the 11 reads per selector in the failing trace are 1 + 10.
 * For a nibble write, the high half of the data byte is the value and the low half is the register; control 05 then 04 strobes it. Registers D and E are written with 5 and A and read back; the values swap after each successful pair. A full trial compares 100 pairs. The outer loop searches delay settings. Sixteen failing pairs in the earlier trace were separate failed trials, not a 16-byte identification message.
-* After calibration and a second configuration burst, the same ID routine uses 0F (high) and 0C (low). For the default 2716 batch run the selected descriptor expects 07. This is a configuration ID, not the contents of the EPROM or a universal reply for all profiles.
+* After calibration and a second configuration burst, the same ID routine uses 0F (high) and 0C (low). For the observed default 27C64 Quick-Pulse batch run the selected descriptor expects 07. This is a configuration ID, not the contents of the EPROM or a universal reply for all profiles.
 * Socket data is assembled in the opposite selector order: 08 gives the low nibble, 09 the high nibble. With the virtual D/E register model, the following run finished and the guest saved **3C**. Changing only 08 to 50 and 09 to A0 yielded **A5**.
 
 ```sh
@@ -47,4 +47,4 @@ python3 tools/lpt_lab.py /path/to/Core sessions/read-3c.log --echo-de \
   --map 06:f0,05:00,0f:00,0c:70,08:c0,09:30
 ```
 
-These are raw backend status bytes. The positive runs each had 800 matched pairs during timing calibration. They establish the one-byte software path, not physical connector polarity, an addressable ROM model, or safe electrical operation.
+These are raw backend status bytes. The positive runs each had 800 matched pairs during timing calibration. They establish the one-byte software path, not physical connector polarity or safe electrical operation. The separate [РФ5 lab](rf5.md) tests the addressable chip model with full READ and WRITE operations.

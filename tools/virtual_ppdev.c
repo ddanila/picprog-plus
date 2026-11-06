@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // DOSBox-X Linux ppdev backend test double. Target is a regular file, never hardware.
 #define _GNU_SOURCE
+#include "rf5_chip.h"
 #include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <linux/ioctl.h>
 #include <linux/ppdev.h>
 #include <stdio.h>
@@ -13,6 +16,20 @@
 static struct stat target;
 static int configured, echo_de;
 static unsigned char scratch[2];
+static unsigned char *chip, reg[16];
+static int device_phase;
+static unsigned address(void) {
+    return reg[2] | (reg[3] << 4) | (reg[13] << 8);
+}
+static void latch(unsigned char bus) {
+    unsigned index = bus & 15, value = bus >> 4;
+    if (chip && device_phase && index == 14 && reg[14] == 8 && value == 12 &&
+        reg[7] == 4 && reg[6] == 2)
+        // The virtual adapter supplies a nominal RF5 pulse. The DOS
+        // transport profile's real socket voltages/timing are not reused.
+        rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4), true, true, RF5_PROGRAM_US);
+    reg[index] = value;
+}
 static unsigned char data, control, replies[256];
 static unsigned char script[256][256];
 static unsigned length[256], cursor[256];
@@ -45,6 +62,16 @@ __attribute__((constructor)) static void setup(void) {
         if (*map++ != ',' || !*map) goto invalid;
     }
     echo_de = getenv("PP_ECHO_DE") && atoi(getenv("PP_ECHO_DE"));
+    const char *image = getenv("PP_RF5_IMAGE");
+    if (image && *image) {
+        int fd = open(image, O_RDWR | O_NOFOLLOW);
+        struct stat st;
+        if (fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size != RF5_BYTES ||
+            (chip = mmap(NULL, RF5_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
+            fprintf(stderr, "RF5 requires a writable regular 2048-byte image\n"); _exit(2);
+        }
+        close(fd);
+    }
     configured = 1;
     return;
 invalid:
@@ -65,6 +92,7 @@ int ioctl(int fd, unsigned long request, unsigned long arg) {
     case PPWDATA: data = *v; event = "WD"; break;
     case PPRDATA: *v = data; event = "RD"; break;
     case PPWCONTROL:
+        if (*v == 5 && control != 5) latch(data);
         if (echo_de && *v == 5 && control != 5 &&
             ((data & 15) == 13 || (data & 15) == 14))
             scratch[(data & 15) - 13] = data & 0xf0;
@@ -74,6 +102,15 @@ int ioctl(int fd, unsigned long request, unsigned long arg) {
         *v = length[data] ? script[data][cursor[data]++ % length[data]] : replies[data];
         if (echo_de && (data == 13 || data == 14))
             *v = (*v & 15) | scratch[data - 13];
+        if (chip) {
+            if (data == 15) device_phase = 1;
+            if (device_phase && data == 4 && reg[7] == 4) *v &= ~0x10;
+            if (device_phase && (data == 8 || data == 9)) {
+                uint8_t byte = 0xff;
+                rf5_read(chip, address(), false, reg[6] != 4, &byte);
+                *v = (*v & 15) | (data == 8 ? (byte << 4) & 240 : byte & 240);
+            }
+        }
         event = "RS"; break;
     default: fprintf(logfile, "UNKNOWN %lx\n", request); errno = ENOTTY; return -1;
     }
