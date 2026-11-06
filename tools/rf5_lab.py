@@ -31,7 +31,7 @@ def run_guest(root, drive, backing, commands, timeout=180, trace=None):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def operate(core, backing, operation, file, start=0, size=None, timeout=180):
+def operate(core, backing, operation, file, start=0, size=None, timeout=180, trace=None):
     if not backing.is_file() or backing.is_symlink() or backing.stat().st_size != 2048:
         raise ValueError('chip must be a regular, exactly 2048-byte image')
     expected = None
@@ -64,7 +64,7 @@ def operate(core, backing, operation, file, start=0, size=None, timeout=180):
         batch.insert(0, 'SET_ROM_TYPE(27C64,Q)')
         batch += ['PRINT "RF5-LAB-COMPLETE"', 'END']
         (drive / 'LAB.B').write_bytes(('MESSAGE ON\r\n' + '\r\n'.join(batch) + '\r\n').encode())
-        run_guest(root, drive, backing, ["PICPROG.EXE /LPT1 LAB.B > REPORT.TXT"], timeout)
+        run_guest(root, drive, backing, ["PICPROG.EXE /LPT1 LAB.B > REPORT.TXT"], timeout, trace)
         report = (drive / 'REPORT.TXT').read_text(encoding='cp866')
         if 'RF5-LAB-COMPLETE' not in report or 'ERROR' in report.upper():
             raise RuntimeError('DOS batch did not succeed: ' + report)

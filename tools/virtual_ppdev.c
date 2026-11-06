@@ -18,16 +18,19 @@ static int configured, echo_de;
 static unsigned char scratch[2];
 static unsigned char *chip, reg[16];
 static int device_phase;
+static unsigned drop_pulses; /* Optional fault injection; counts qualified pulses only. */
 static unsigned address(void) {
     return reg[2] | (reg[3] << 4) | (reg[13] << 8);
 }
 static void latch(unsigned char bus) {
     unsigned index = bus & 15, value = bus >> 4;
     if (chip && device_phase && index == 14 && reg[14] == 8 && value == 12 &&
-        reg[7] == 4 && reg[6] == 2)
+        reg[7] == 4 && reg[6] == 2) {
         // The virtual adapter supplies a nominal RF5 pulse. The DOS
         // transport profile's real socket voltages/timing are not reused.
-        rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4), true, true, RF5_PROGRAM_US);
+        if (drop_pulses) --drop_pulses;
+        else rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4), true, true, RF5_PROGRAM_US);
+    }
     reg[index] = value;
 }
 static unsigned char data, control, replies[256];
@@ -72,6 +75,7 @@ __attribute__((constructor)) static void setup(void) {
         }
         close(fd);
     }
+    if (getenv("PP_DROP_PULSES")) drop_pulses = strtoul(getenv("PP_DROP_PULSES"), NULL, 10);
     configured = 1;
     return;
 invalid:

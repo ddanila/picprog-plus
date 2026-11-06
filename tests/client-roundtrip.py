@@ -64,6 +64,7 @@ def main(core=None):
             client(chip, 'WRF5', src, lib, trace)
             check(configuration_hashes(trace) == [
                 '7c382f7d667e53e06ce0f64ab70afeb2a6277c2c2b38e20a73b0c1d5679858be',
+                'ad7ce1115d330be3728c8a4d4b69d197dbdb5dabc7eb4660dc33cb4354fc613e',
                 'ad7ce1115d330be3728c8a4d4b69d197dbdb5dabc7eb4660dc33cb4354fc613e'],
                 'configuration differs from vendor trace')
         else:

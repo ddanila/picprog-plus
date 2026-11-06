@@ -27,9 +27,17 @@ build/dos/%.o: src/%.c src/rf5_port.h
 build/dos/dosio.o: third_party/willem-v30/src/dosio.asm
 	mkdir -p build/dos
 	nasm -f as86 $< -o $@
-build/dos/PICRF5.COM: build/dos/rf5_main.o build/dos/rf5_port.o build/dos/dosio.o
+build/dos/config_edge.o: src/config_edge.asm
+	mkdir -p build/dos
+	nasm -f as86 $< -o $@
+build/dos/PICRF5.COM: build/dos/rf5_main.o build/dos/rf5_port.o build/dos/dosio.o build/dos/config_edge.o
 	bcc -0 -Md -i -o $@ $^
 
 .PHONY: client-test
 client-test: dos lab
 	python3 tests/client-roundtrip.py
+
+.PHONY: parity-test
+parity-test: dos lab
+	@test -n "$(CORE)" || { echo 'Set CORE to the extracted Phyton 2.77 Core directory'; exit 2; }
+	python3 tests/lpt-parity.py "$(CORE)" --faults
