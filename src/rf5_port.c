@@ -7,6 +7,8 @@ extern void dos_outb(unsigned port, unsigned value);
 extern unsigned dos_inb(unsigned port);
 static unsigned base;
 static unsigned hold = 1;
+static int eeprom;
+extern unsigned pp_ticks(void);
 
 void pp_base(unsigned port) { base = port; }
 
@@ -103,15 +105,15 @@ static void zero_serial(void)
  * boot phase keeps the cleared low address registers from the first stage. */
 static void reset_profile(int middle)
 {
-    serial_clock(0xf7); wr(7); wr(0x46);
+    serial_clock(eeprom ? 0xef : 0xf7); wr(7); wr(0x46);
     if (!middle) { wr(2); wr(3); }
-    wr(13); wr(0xce); wr(0x8e); wr(14);
+    wr(13); if (!eeprom) { wr(0xce); wr(0x8e); } wr(14);
     if (!middle) wr(15);
     zero_serial();
 }
 static void park_profile(void)
 {
-    serial_clock(0xf7); wr(7); wr(0xce); wr(0x8e); wr(14);
+    serial_clock(eeprom ? 0xef : 0xf7); wr(7); if (!eeprom) { wr(0xce); wr(0x8e); wr(14); }
     zero_serial(); wr(0xc6); wr(0x46);
 }
 static int pair_id(unsigned first, unsigned second, unsigned value)
@@ -154,16 +156,19 @@ static int calibrate(void)
 }
 static void socket_setup(void)
 {
+    if (eeprom) {
+        serial_clock(0xef); changed(4,2); wr(0x76); transfer(6); wr(0x46); wr(0xa2); return;
+    }
     serial_clock(0xf7); transfer(6); transfer(4);
     wr(7); wr(0xce); shift(0x80); wr(0x27); dos_wait_us(1000); wr(7); wr(0xa2);
 }
 static unsigned bus_read(void);
 
-int pp_batch_start(unsigned char *startup, unsigned char *parallel, int selection)
+int pp_batch_start(unsigned char *startup, unsigned char *parallel, int selection, unsigned char *polling)
 {
     unsigned n, value = 0x31, sense = 0;
     unsigned pullup, pulldown;
-    hold = 1;
+    eeprom = 0; hold = 1;
     if (!startup) { hold = 2; goto configured; }
     if (!stream(startup) || !pair_id(6,5,0xf0)) goto unlink;
     reset_profile(0);
@@ -172,11 +177,11 @@ int pp_batch_start(unsigned char *startup, unsigned char *parallel, int selectio
     reset_profile(1); park_profile();
     if (selection < 0) return 1; /* rejected before socket setup */
     if (!selection) goto configured; /* batch kept the startup profile */
-    /* The batch's explicit SET_ROM_TYPE re-loads the selected profile. */
-    if (!stream(parallel) || !pair_id(15,12,7)) goto unlink;
+    eeprom = selection == 2;
+    if (!stream(eeprom ? polling : parallel) || !pair_id(15,12,eeprom ? 0x13 : 7)) goto unlink;
     reset_profile(0); park_profile();
 configured:
-    if (!pair_id(15,12,7)) return 0;
+    if (!pair_id(15,12,eeprom ? 0x13 : 7)) return 0;
     for (n = 0; n < 8; ++n) {
         unsigned bit = (value & 1) << 4;
         wr(0x85 | bit); wr(0xc5 | bit);
@@ -198,7 +203,7 @@ unlink:
 }
 static void address_cached(unsigned a)
 {
-    changed(2,a); changed(3,a >> 4); changed(13,a >> 8); changed(14,12 | ((a >> 12) & 3));
+    changed(2,a); changed(3,a >> 4); changed(13,a >> 8); if (!eeprom) changed(14,12 | ((a >> 12) & 3));
 }
 static unsigned bus_read(void)
 {
@@ -207,6 +212,7 @@ static unsigned bus_read(void)
 }
 static void end_socket(void)
 {
+    if (eeprom) { serial_clock(0xef); wr(7); address_cached(0); zero_serial(); return; }
     serial_clock(0xf7); changed(6,4); changed(2,0); changed(3,0); changed(13,0); changed(14,12);
     wr(0x8e); wr(14); zero_serial();
 }
@@ -243,6 +249,21 @@ int pp_batch_transfer(unsigned char *buf, int mode, unsigned *where, unsigned st
         }
         if (mode != 3) return 1;
         end_socket(); socket_setup();
+    }
+    if (eeprom) {
+        for (a=start; a<stop; ++a) {
+            unsigned tick;
+            *where=a; v=buf[a-start]; address_cached(a);
+            if (bus_read()==v) continue;
+            wr(0x36); changed(0,v); changed(1,v>>4);
+            wr(4); wr(0x26); wr(0x24); wr(0x36); wr(0x46);
+            tick=pp_ticks();
+            do {
+                if ((unsigned)(pp_ticks()-tick)>=2) return 0;
+            } while (bus_read()!=v);
+            if (bus_read()!=v) return 0;
+        }
+        return 1;
     }
     for (page = start; page < stop; page += 256) {
         /* 2.77 completes and verifies 256-byte blocks even when the

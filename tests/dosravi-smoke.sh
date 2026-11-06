@@ -15,9 +15,10 @@ make build/PPPORTS.COM
 mkdir "$work/RAVI"
 cp "$ravi/build/dos/DOSRAVI.COM" "$work/RAVI/"
 box=$(command -v dosbox-x)
+socket=
 parallel=file
 preload=
-if [[ ${1:-} == --rf5 || ${1:-} == --reference ]]; then
+if [[ ${1:-} == --rf5 || ${1:-} == --at28c16 || ${1:-} == --reference ]]; then
   make dos lab
   preload="$PWD/build/virtual_ppdev.so"
   cp "$box" "$work/dosbox-x"
@@ -31,6 +32,11 @@ p = Path(sys.argv[1])
 (p/'chip').write_bytes(b'\xff'*2048)
 (p/'payload').write_bytes(random.Random(573).randbytes(2048))
 ENDPY
+fi
+if [[ ${1:-} == --at28c16 ]]; then
+  core=${2:?supply the extracted PicProg 2.77 Core directory}
+  cp "$core/picprog.lib" "$work/RAVI/PICPROG.LIB"
+  socket=AT28C16
 fi
 cpu=8086
 machine=()
@@ -50,7 +56,7 @@ p = Path(sys.argv[1])
 (p/'read.b').write_bytes(b'MESSAGE ON\r\nSET_ROM_TYPE(27C64,Q)\r\nREAD(0,2047,0,0)\r\nSAVE("DUMP.BIN",BIN,0,0,2047)\r\nEND\r\n')
 ENDPY
 fi
-env LD_PRELOAD="$preload" PP_ENDPOINT="$work/endpoint" PP_TRACE=/dev/null \
+env PP_SOCKET="$socket" LD_PRELOAD="$preload" PP_ENDPOINT="$work/endpoint" PP_TRACE=/dev/null \
   PP_MAP=06:f0,05:00,0f:00,0c:70 PP_STATUS=0xd8 PP_ECHO_DE=1 PP_RF5_IMAGE="$work/chip" \
   SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy "$box" -silent -fastlaunch \
   -set 'sdl output=surface' "${machine[@]}" -set "cpu cputype=$cpu" -set 'cpu cycles=max' \
@@ -72,6 +78,15 @@ if [[ ${1:-} == --reference ]]; then
   ravi_run reference --put "$work/read.b:READ.B" --exec 'PICPROG.EXE /LPT1 READ.B' --get DUMP.BIN
   cmp "$work/reference/DUMP.BIN" "$work/payload"
   echo 'PASS: DOSRAVI ran the original driver and retrieved the seeded chip.'
+  exit
+fi
+if [[ ${1:-} == --at28c16 ]]; then
+  ravi_run program --put build/dos/PICRF5.COM:PICRF5.COM --put "$work/payload:INPUT.BIN" \
+    --exec 'PICRF5.COM WRITE INPUT.BIN 378 PICPROG.LIB 0 2048 AT28C16,P'
+  cmp "$work/chip" "$work/payload"
+  ravi_run readback --exec 'PICRF5.COM READ DUMP.BIN 378 PICPROG.LIB 0 2048 AT28C16,P' --get DUMP.BIN
+  cmp "$work/readback/DUMP.BIN" "$work/payload"
+  echo 'PASS: DOSRAVI and the 8086 client programmed and retrieved the AT28C16 image.'
   exit
 fi
 if [[ ${1:-} == --rf5 ]]; then

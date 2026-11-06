@@ -69,3 +69,23 @@ and aligned 256-byte requests ending at 07FFh complete normally.
 cell. Set `PP_STUCK_CELL=7fb:01` to inhibit clearing bit zero at physical
 address 07FBh in the EPROM model. It affects the stored byte only; all
 readbacks use actual cell contents.
+
+### First bench comparison (read only; not yet performed)
+
+1. Record the PicProg+ revision, supply, cable and LPT base. Establish
+   the actual socket orientation and routing for the specific MB002 part
+   or adapter from its marking, device documentation and continuity with
+   power disconnected. The exact Soviet part number in the inventory is
+   unconfirmed; the 27C64 software selection is not a wiring diagram.
+2. With the socket empty, observe power-up, initialization and READ.
+   Check ground, VCC, VPP and control levels at the intended chip contacts
+   against that part's read ratings, including transitions. Use a scope for
+   transients a meter cannot resolve. An empty-socket rejection may prevent
+   the complete read sequence: in that case establish the remaining levels
+   with a breakout/test load before connecting the ROM.
+3. Only after routing and levels are established, power down, insert the ROM,
+   and acquire two full dumps to separate files using fresh sessions. Retrieve
+   both via DOSRAVI. Compare the files and their SHA-256 with the MB002
+   reference above; retain raw dumps, logs and setup notes. On disagreement,
+   keep both and investigate. Two matching reads validate readout, not VPP or
+   a physical programming cycle. No WRITE or OVERWRITE is part of this check.

@@ -5,8 +5,8 @@
 
 static unsigned char image[16384];
 
-/* Data is supplied by the user. Validate both slices before touching LPT. */
-static unsigned char config[2][PP_STREAM_SIZE];
+/* Data is supplied by the user. Validate all required slices before touching LPT. */
+static unsigned char config[3][PP_STREAM_SIZE];
 static int load_stream(FILE *f, unsigned char *buf, unsigned skip, unsigned long sum)
 {
     unsigned i, bit;
@@ -62,7 +62,8 @@ int main(int argc, char **argv)
     int action, rc = 1, batch = 0, intelligent = 0, selection = 1;
     FILE *f;
     if (argc == 8) {
-        if (!strcmp(argv[7],"DEFAULT")) selection = 0;
+        if (!strcmp(argv[7],"AT28C16,P")) { selection=2; capacity=2048; }
+        else if (!strcmp(argv[7],"DEFAULT")) selection = 0;
         else if (unavailable(argv[7])) selection = -1;
         else if (!strcmp(argv[7],"27C128,I") || !strcmp(argv[7],"27C128,Q")) capacity = 16384;
         else if (strcmp(argv[7],"27C64,I") && strcmp(argv[7],"27C64,Q")) goto usage;
@@ -103,7 +104,8 @@ int main(int argc, char **argv)
         f = fopen(argv[4], "rb");
         if (!f) { puts("Cannot open configuration library"); return 1; }
         /* Parallel @64018, startup @69584: a 2788-byte gap. */
-        rc = load_stream(f, config[1], 64018U, 0x7ce26b67UL) &&
+        rc = (selection != 2 || load_stream(f, config[2], 19490U, 0x6670671eUL)) &&
+             load_stream(f, config[1], selection == 2 ? 41750U : 64018U, 0x7ce26b67UL) &&
              load_stream(f, config[0], 2788U, 0x4c53af75UL);
         fclose(f);
         if (!rc) { puts("Configuration payload mismatch"); return 1; }
@@ -111,7 +113,7 @@ int main(int argc, char **argv)
     }
     pp_base(port);
     if (!pp_batch_start(argc >= 5 ? config[0] : NULL,
-                        argc >= 5 ? config[1] : NULL, selection)) {
+                        argc >= 5 ? config[1] : NULL, selection, config[2])) {
         puts("Configuration, ID or socket check failed"); return 1;
     }
     if (selection < 0) {

@@ -18,3 +18,13 @@ _pp_edge_pair:
     popf
     pop bp
     ret
+
+; Low word of the BIOS tick counter, as used by the reference polling loop.
+GLOBAL _pp_ticks
+_pp_ticks:
+    push es
+    mov ax,0x40
+    mov es,ax
+    mov ax,[es:0x6c]
+    pop es
+    ret

@@ -38,7 +38,7 @@ def reference(core, chip, op, start, length, file, trace, failure=False, profile
         (d / 'TASK.B').write_bytes(('\r\n'.join(batch)+'\r\n').encode())
         try:
             run_guest(root, d, chip, ['PICPROG.EXE /LPT1 TASK.B > REPORT.TXT'],
-                      timeout=18 if failure else 180, trace=trace)
+                      timeout=18 if failure else 180, trace=trace, socket="AT28C16" if profile=="AT28C16,P" else None)
         except subprocess.TimeoutExpired:
             # 2.77 blocks for operator input on batch chip errors. Only compare
             # the bus observations, not what a later keypress would do.

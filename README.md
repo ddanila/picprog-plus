@@ -6,6 +6,8 @@ For the 27C64 and 27C128 Quick-Pulse and Intelligent profiles, the [LPT parity r
 
 For the Robotron boot ROM, see [what PicProg 2.77 actually does for 2716, РФ2 and РФ5](docs/rf5.md#what-the-original-does-for-2716-рф2-and-рф5), including the verified 2 KiB batch default and the MB002 trace comparison.
 
+The [AT28C16 EEPROM profile and lab](docs/at28c16.md) support byte replacement and busy polling on the same LPT interface.
+
 ## Try the host-side check
 
 Build with NASM and GNU Make. With [DOSRAVI](https://github.com/ddanila/dosravi) started on the DOS machine, run from the host (substitute the serial device and the agent's baud rate):

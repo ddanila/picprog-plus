@@ -12,6 +12,22 @@ import tempfile
 m = runpy.run_path(str(Path(__file__).with_name('lpt-parity.py')))
 
 
+def pulses(path):
+    """Qualified programming edges on the programmer address bus (before aliasing)."""
+    reg=[0]*16; last=None; bus=0; result=[]
+    for line in path.read_text().splitlines():
+        event,value=line.split(); value=int(value,16)
+        if event=='WD': bus=value
+        if event!='WC': continue
+        if value==5 and last!=5:
+            index=bus&15; nibble=bus>>4
+            if index==14 and reg[14]==8 and nibble==12 and reg[6]==2 and reg[7]==4:
+                result.append(reg[2] | reg[3]<<4 | reg[13]<<8)
+            reg[index]=nibble
+        last=value
+    return result
+
+
 def compare(spec):
     core, op, count, capacity, fault = spec
     start = 2048-count
@@ -48,6 +64,10 @@ def compare(spec):
             with (d/'gold').open('rb') as a,(d/'ours').open('rb') as b:
                 for n,(x,y) in enumerate(zip_longest(a,b),1):
                     if x!=y: raise AssertionError(f'{spec}, event {n}: {x!r} != {y!r}')
+            attempts=pulses(d/'gold')
+            if bad is not None: assert attempts.count(bad)==25
+            if fault=='retry': assert attempts.count(start)==2
+            if bad==2048: assert attempts[-1]==2048
             return f'{op} {start:04X}..07FF {capacity} {fault}: {n} identical events'
     finally:
         for k in ('PP_STUCK_CELL','PP_DROP_PULSES'): os.environ.pop(k,None)

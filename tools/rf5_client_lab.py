@@ -14,13 +14,15 @@ from rf5_lab import run_guest
 REJECTED_2716 = tuple(name + ',' + mode
     for name in ('2716','U2716C35','RF2','RF5','K573RF2','K573RF5','К573РФ2','К573РФ5','РФ2','РФ5')
     for mode in ('I','Q'))
-PROFILES = ('27C64,Q','27C64,I','27C128,Q','27C128,I','DEFAULT') + REJECTED_2716
+PROFILES = ('27C64,Q','27C64,I','27C128,Q','27C128,I','AT28C16,P','DEFAULT') + REJECTED_2716
 
 
 def client(chip, command, image, library=None, trace=None, start=0, length=2048, profile='27C64,Q'):
     com = Path(__file__).resolve().parents[1] / 'build/dos/PICRF5.COM'
     if chip.is_symlink() or not chip.is_file() or chip.stat().st_size not in (2048,8192,16384):
         raise ValueError('expected a regular 2048-, 8192- or 16384-byte chip image')
+    if profile=='AT28C16,P' and (chip.stat().st_size!=2048 or library is None):
+        raise ValueError('AT28C16,P requires a 2048-byte image and the 2.77 library')
     if length < 1 or start < 0 or start + length > chip.stat().st_size:
         raise ValueError('request outside selected chip')
     if command not in ('RRF5', 'VRF5', 'WRF5', 'READ', 'VERIFY', 'WRITE', 'OVERWRITE', 'CHECK'):
@@ -48,7 +50,7 @@ def client(chip, command, image, library=None, trace=None, start=0, length=2048,
         (drive / 'RUN.BAT').write_bytes(
             (f'@echo off\r\nPICRF5.COM {command} IMAGE.BIN 378{arg} > RESULT.TXT\r\n'
              'if errorlevel 1 goto end\r\necho ok > PASS.OK\r\n:end\r\n').encode('cp866'))
-        run_guest(root, drive, chip, ['call RUN.BAT'], trace=trace)
+        run_guest(root, drive, chip, ['call RUN.BAT'], trace=trace, socket="AT28C16" if profile=="AT28C16,P" else None)
         msg = (drive / 'RESULT.TXT').read_text(encoding='cp866')
         if not (drive / 'PASS.OK').exists() or f'{command} OK: {length} bytes' not in msg:
             raise RuntimeError(msg.strip() or 'DOS client failed')
