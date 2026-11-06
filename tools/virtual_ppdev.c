@@ -11,7 +11,8 @@
 #include <unistd.h>
 
 static struct stat target;
-static int configured;
+static int configured, echo_de;
+static unsigned char scratch[2];
 static unsigned char data, control, replies[256];
 static unsigned char script[256][256];
 static unsigned length[256], cursor[256];
@@ -43,6 +44,7 @@ __attribute__((constructor)) static void setup(void) {
         if (!*map) break;
         if (*map++ != ',' || !*map) goto invalid;
     }
+    echo_de = getenv("PP_ECHO_DE") && atoi(getenv("PP_ECHO_DE"));
     configured = 1;
     return;
 invalid:
@@ -62,10 +64,16 @@ int ioctl(int fd, unsigned long request, unsigned long arg) {
     case PPDATADIR: fprintf(logfile, "DIR %d\n", *(int *)arg); return 0;
     case PPWDATA: data = *v; event = "WD"; break;
     case PPRDATA: *v = data; event = "RD"; break;
-    case PPWCONTROL: control = *v; event = "WC"; break;
+    case PPWCONTROL:
+        if (echo_de && *v == 5 && control != 5 &&
+            ((data & 15) == 13 || (data & 15) == 14))
+            scratch[(data & 15) - 13] = data & 0xf0;
+        control = *v; event = "WC"; break;
     case PPRCONTROL: *v = control; event = "RC"; break;
     case PPRSTATUS:
         *v = length[data] ? script[data][cursor[data]++ % length[data]] : replies[data];
+        if (echo_de && (data == 13 || data == 14))
+            *v = (*v & 15) | scratch[data - 13];
         event = "RS"; break;
     default: fprintf(logfile, "UNKNOWN %lx\n", request); errno = ENOTTY; return -1;
     }

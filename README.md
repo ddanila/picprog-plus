@@ -1,6 +1,6 @@
 # Phyton PicProg+ for DOSRAVI
 
-An independent start on a DOS driver for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. The first initialization exchange has been reproduced in emulation; the rest of the programmer protocol is unresolved. **No chip read, erase, programming or voltage selection is implemented or hardware verified.** This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
+An independent start on a DOS driver for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. The virtual programmer passes initialization and supplies one synthetic byte to the original DOS application. **No chip read, erase, programming or voltage selection is implemented or hardware verified.** This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
 
 ## Try the host-side check
 
@@ -19,7 +19,7 @@ You can do this with the programmer disconnected. PPPORTS lists the first three 
 
 ## Virtual programmer lab
 
-The [Linux virtual LPT lab](docs/virtual-lpt.md) records what the original DOS program writes and can vary the replies without a programmer. A synthetic response passes its first handshake check; the subsequent self-check still fails.
+The [Linux virtual LPT lab](docs/virtual-lpt.md) records what the original DOS program writes and can vary the replies without a programmer. The register model passes both identity checks and timing calibration; the original DOS program saves the requested synthetic byte.
 
 ## Where to take the first capture
 
