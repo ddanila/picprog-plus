@@ -2,7 +2,7 @@
 
 An independent DOS driver and emulator for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. Both our [PICRF5.COM DOS client](docs/dos-client.md) and the original DOS application [read and program the same persistent 2 KiB К573РФ5](docs/rf5.md). Physical chip access and programming voltages are unverified. This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
 
-For the tested 27C64 Quick-Pulse profile, the [LPT parity report](docs/lpt-parity.md) compares the independent client with the original executable, including configuration, reads, programming retries, verification and shutdown.
+For the 27C64 and 27C128 Quick-Pulse and Intelligent profiles, the [LPT parity report](docs/lpt-parity.md) compares the independent client with the original executable, including configuration, reads, programming retries, verification and shutdown.
 
 ## Try the host-side check
 

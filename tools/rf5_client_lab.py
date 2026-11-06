@@ -9,10 +9,12 @@ import tempfile
 from rf5_lab import run_guest
 
 
-def client(chip, command, image, library=None, trace=None, start=0, length=2048):
+def client(chip, command, image, library=None, trace=None, start=0, length=2048, profile='27C64,Q'):
     com = Path(__file__).resolve().parents[1] / 'build/dos/PICRF5.COM'
-    if chip.is_symlink() or not chip.is_file() or chip.stat().st_size != 2048:
-        raise ValueError('expected a regular 2048-byte chip image')
+    if chip.is_symlink() or not chip.is_file() or chip.stat().st_size not in (2048,8192,16384):
+        raise ValueError('expected a regular 2048-, 8192- or 16384-byte chip image')
+    if length < 1 or start < 0 or start + length > chip.stat().st_size:
+        raise ValueError('request outside selected chip')
     if command not in ('RRF5', 'VRF5', 'WRF5', 'READ', 'VERIFY', 'WRITE', 'OVERWRITE', 'CHECK'):
         raise ValueError('unknown command')
     if command in ('RRF5','READ') and (image.exists() or image.is_symlink()):
@@ -29,8 +31,12 @@ def client(chip, command, image, library=None, trace=None, start=0, length=2048)
         if library is not None:
             shutil.copyfile(library, drive / 'PICPROG.LIB')
             arg = ' PICPROG.LIB'
-        if (start,length) != (0,2048):
+        if profile not in ('27C64,Q','27C64,I','27C128,Q','27C128,I'):
+            raise ValueError('unknown profile')
+        if (start,length) != (0,2048) or profile != '27C64,Q':
             arg += f' {start} {length}'
+        if profile != '27C64,Q':
+            arg += ' ' + profile
         (drive / 'RUN.BAT').write_bytes(
             (f'@echo off\r\nPICRF5.COM {command} IMAGE.BIN 378{arg} > RESULT.TXT\r\n'
              'if errorlevel 1 goto end\r\necho ok > PASS.OK\r\n:end\r\n').encode())
@@ -55,5 +61,6 @@ if __name__ == '__main__':
     parser.add_argument('--library', type=Path, help='optional local Phyton configuration library')
     parser.add_argument('--start', type=int, default=0)
     parser.add_argument('--length', type=int, default=2048)
+    parser.add_argument('--profile', choices=['27C64,Q','27C64,I','27C128,Q','27C128,I'], default='27C64,Q')
     args = parser.parse_args()
-    print(client(args.chip, args.command, args.image, args.library, start=args.start, length=args.length))
+    print(client(args.chip, args.command, args.image, args.library, start=args.start, length=args.length, profile=args.profile))

@@ -1,6 +1,6 @@
 # Independent РФ5 DOS client
 
-`PICRF5.COM` is an 8086 DOS program for a single 2 KiB К573РФ5 on the modeled PicProg parallel interface. It reads and writes the PC's LPT registers itself. It neither executes PICPROG.EXE nor opens the virtual chip's backing file. The same file-backed virtual programmer can be started in successive DOS sessions with either client.
+`PICRF5.COM` is an 8086 DOS program for the modeled PicProg parallel interface, with a 2 KiB К573РФ5 adapter or an 8/16 KiB 27C64/27C128 image. It reads and writes the PC's LPT registers itself. It neither executes PICPROG.EXE nor opens the virtual chip's backing file. The same file-backed virtual programmer can be started in successive DOS sessions with either client.
 
 ## Build and run
 
@@ -22,6 +22,8 @@ By default the client expects the parallel-register profile already active (ID 0
 
 The vendor-style operation names take a library argument, followed optionally by a decimal start address and byte count. For example, `PICRF5 READ DUMP.BIN 378 PICPROG.LIB 253 263` saves addresses 00FDh–0203h. VERIFY, WRITE and OVERWRITE take an input file exactly as long as the request. CHECK tests for erased bytes and ignores its filename argument. WRITE starts programming immediately; OVERWRITE checks that every requested change is possible first.
 
+For a full 27C64 use an 8192-byte backing image and specify start 0 and length 8192. Example: `PICRF5 WRITE IMAGE.BIN 378 PICPROG.LIB 0 8192 27C64,I` uses Intelligent programming; omit the last token for Quick-Pulse. The lab accepts `--start 0 --length 8192 --profile 27C64,I`. For 27C128, supply a 16384-byte image and select `27C128,Q` or `27C128,I` explicitly. The three short RF5 commands keep their 2048-byte defaults. Partial multi-block writes can access and attempt to program padding beyond the requested end, just as the original does; see the [trace evidence](lpt-parity.md).
+
 ## Using DOSRAVI
 
 The new binary uses the same upload / execute / retrieve workflow as WILLEM.COM. For a DOSRAVI agent connected to the **virtual programmer**, substitute your transport settings:
@@ -37,3 +39,25 @@ dosravi --tcp 127.0.0.1:19572 run \
 `make client-test` tests the compiled DOS program without vendor files. `python3 tests/client-roundtrip.py /path/to/Core` adds the configuration trace check and reads each client's programmed image using the other client. `tests/dosravi-smoke.sh --rf5` starts DOSRAVI on an emulated 8086, uploads the new COM and payload, runs two separate commands, and compares the retrieved dump.
 
 **Hardware boundary:** the verified target is the [virtual РФ5 adapter](rf5.md). The reference software's transport profile is 27C64 Quick-Pulse; the adapter translates its programming command into an РФ5 pulse. The independent client implements this register interface. A real PicProg's socket routing, VPP, pulse and cold startup have not been bench-validated for РФ5. An ID match alone does not establish those conditions.
+
+
+## Exact reference behavior through DOSRAVI
+
+For a device the independent client does not implement, DOSRAVI can run the original batch program and leave every LPT decision to Phyton. Put your extracted PICPROG.EXE, PICPROG.OVL, PICPROG.LIB and PICPROG.CFG in the agent's working directory. For example, this READ.B reads the 2 KiB virtual adapter through the reference profile:
+
+```text
+MESSAGE ON
+SET_ROM_TYPE(27C64,Q)
+READ(0,2047,0,0)
+SAVE("DUMP.BIN",BIN,0,0,2047)
+END
+```
+
+Save the batch with DOS line endings. The host invocation is:
+
+```sh
+dosravi --serial /dev/ttyUSB0 --baud 57600 run --put READ.B:READ.B \
+  --exec 'PICPROG.EXE /LPT1 READ.B' --get DUMP.BIN
+```
+
+`bash tests/dosravi-smoke.sh --reference /path/to/Core` reproduces this with a temporary DOS drive, emulated 386 and seeded virtual 2 KiB chip; the test compares the entire returned file. Use the independent client for the 8086 target. The reference test does not establish that the proprietary application will run with the CPU and free DOS memory of every laptop.

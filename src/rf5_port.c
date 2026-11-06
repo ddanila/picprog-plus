@@ -132,7 +132,7 @@ static int scratch_trial(void)
     unsigned i, d, e, rd, re;
     for (i = 0; i < 100; ++i) {
         d = (i & 1) ? 10 : 5; e = 15 - d;
-        wr((d << 4) | 13); wr((e << 4) | 14);
+        changed(13,d); changed(14,e);
         rd = sample(13); re = sample(14);
         if (rd != d || re != e) return 0;
     }
@@ -196,7 +196,7 @@ unlink:
 }
 static void address_cached(unsigned a)
 {
-    changed(2,a); changed(3,a >> 4); changed(13,a >> 8);
+    changed(2,a); changed(3,a >> 4); changed(13,a >> 8); changed(14,12 | ((a >> 12) & 3));
 }
 static unsigned bus_read(void)
 {
@@ -205,7 +205,7 @@ static unsigned bus_read(void)
 }
 static void end_socket(void)
 {
-    serial_clock(0xf7); changed(2,0); changed(3,0); changed(13,0);
+    serial_clock(0xf7); changed(6,4); changed(2,0); changed(3,0); changed(13,0); changed(14,12);
     wr(0x8e); wr(14); zero_serial();
 }
 void pp_batch_end(int success)
@@ -213,9 +213,23 @@ void pp_batch_end(int success)
     end_socket();
     if (success) { wr(0xc6); wr(0x46); }
 }
-/* 0 read, 1 verify, 2 write, 3 overwrite, 4 blank check. Report first error address. */
-int pp_batch_transfer(unsigned char *buf, int mode, unsigned *where, unsigned start, unsigned length)
+/* Positive: readback matches; zero: retryable; negative: status fault. */
+static int pulse(unsigned value, unsigned units)
 {
+    unsigned high = (latched[14] & 3) << 4;
+    wr(0x26); changed(0,value); changed(1,value >> 4);
+    wr(0x8e | high);
+    while (units > 500) { dos_wait_us(50000); units -= 500; }
+    dos_wait_us(units * 100);
+    wr(0xce | high);
+    if (sample(4) & 1) return -1;
+    wr(0x46);
+    return bus_read() == value;
+}
+/* 0 read, 1 verify, 2 write, 3 overwrite, 4 blank check. Report first error address. */
+int pp_batch_transfer(unsigned char *buf, int mode, unsigned *where, unsigned start, unsigned length, int intelligent)
+{
+    int result;
     unsigned a, page, v, old, attempt, stop = start + length, limit;
     if (mode != 2) {
         for (a = start; a < stop; ++a) {
@@ -230,28 +244,25 @@ int pp_batch_transfer(unsigned char *buf, int mode, unsigned *where, unsigned st
     }
     for (page = start; page < stop; page += 256) {
         /* 2.77 completes and verifies 256-byte blocks even when the
-         * request ends halfway through one. Never pulse a padding cell
-         * or wrap the virtual RF5's eleven address bits. */
+         * request ends halfway through one. The address on the programmer
+         * bus is distinct from the eleven address pins of the adapter. */
         limit = page + (length < 256 ? length : 256);
-        if (limit > RF5_SIZE) limit = RF5_SIZE;
         transfer(4); wr(0x47);
         for (a = page; a < limit; ++a) {
             *where = a; v = a < stop ? buf[a-start] : 255; address_cached(a); old = bus_read();
             if (old == v) continue;
-            if (a >= stop) { wr(7); transfer(6); return 0; }
             for (attempt = 0; attempt < 25; ++attempt) {
-                wr(0x26); changed(0,v); changed(1,v >> 4);
-                wr(0x8e); dos_wait_us(100); wr(0xce);
-                if (sample(4) & 1) { wr(7); transfer(6); return 0; }
-                wr(0x46);
-                if (bus_read() == v) break;
+                result = pulse(v, intelligent ? 10 : 1);
+                if (result) break;
             }
-            if (attempt == 25) {
+            if (result > 0 && intelligent) result = pulse(v,30*(attempt+1));
+            if (result < 0) { wr(7); return 0; }
+            if (!result) {
                 unsigned prefix;
                 wr(7); transfer(6);
                 for (prefix = page; prefix < a; ++prefix) {
                     address_cached(prefix);
-                    if (bus_read() != buf[prefix-start]) { *where = prefix; break; }
+                    if (bus_read() != (prefix < stop ? buf[prefix-start] : 255)) { *where = prefix; break; }
                 }
                 return 0;
             }

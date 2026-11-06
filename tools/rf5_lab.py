@@ -18,8 +18,8 @@ def run_guest(root, drive, backing, commands, timeout=180, trace=None):
     if not lib.is_file():
         raise ValueError('run make lab first')
     env = dict(os.environ, LD_PRELOAD=str(lib), PP_ENDPOINT=str(ep), PP_TRACE=str(trace.resolve()) if trace is not None else os.devnull,
-               PP_RF5_IMAGE=str(backing.resolve()), PP_ECHO_DE='1', PP_STATUS='0xd8',
-               PP_MAP='06:f0,05:00,0f:00,0c:70', SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
+               PP_RF5_IMAGE=str(backing.resolve()), PP_ECHO_DE=os.environ.get('PP_LAB_ECHO','1'), PP_STATUS='0xd8',
+               PP_MAP=os.environ.get('PP_LAB_MAP','06:f0,05:00,0f:00,0c:70'), SDL_VIDEODRIVER='dummy', SDL_AUDIODRIVER='dummy')
     cmd = [str(box), '-silent', '-fastlaunch']
     for option in ('dosbox machine=cga', 'dosbox allow more than 640kb base memory=true',
                    'cpu cycles=60000', f'parallel parallel1=reallpt realport:{ep}',

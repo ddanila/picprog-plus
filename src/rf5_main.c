@@ -3,7 +3,7 @@
 #include <string.h>
 #include "rf5_port.h"
 
-static unsigned char image[RF5_SIZE];
+static unsigned char image[16384];
 
 /* Data is supplied by the user. Validate both slices before touching LPT. */
 static unsigned char config[2][PP_STREAM_SIZE];
@@ -33,8 +33,9 @@ static int number(char *text, unsigned *result)
     if (!*text) return 0;
     while (*text) {
         if (*text < '0' || *text > '9') return 0;
+        if (value > 1638) return 0;
         value = value * 10 + (*text++ - '0');
-        if (value > RF5_SIZE) return 0;
+        if (value > 16384) return 0;
     }
     *result = value;
     return 1;
@@ -42,9 +43,15 @@ static int number(char *text, unsigned *result)
 
 int main(int argc, char **argv)
 {
-    unsigned port, a, start = 0, length = RF5_SIZE;
-    int action, rc = 1, batch = 0;
+    unsigned capacity = 8192, port, a, start = 0, length = RF5_SIZE;
+    int action, rc = 1, batch = 0, intelligent = 0;
     FILE *f;
+    if (argc == 8) {
+        if (!strcmp(argv[7],"27C128,I") || !strcmp(argv[7],"27C128,Q")) capacity = 16384;
+        else if (strcmp(argv[7],"27C64,I") && strcmp(argv[7],"27C64,Q")) goto usage;
+        intelligent = argv[7][strlen(argv[7])-1] == 'I';
+        --argc;
+    }
     if (argc != 4 && argc != 5 && argc != 7) goto usage;
     if (!strcmp(argv[1], "RRF5")) action = 0;
     else if (!strcmp(argv[1], "VRF5")) action = 1;
@@ -56,7 +63,7 @@ int main(int argc, char **argv)
     else if (argc >= 5 && !strcmp(argv[1], "OVERWRITE")) { batch = 1; action = 3; }
     else goto usage;
     if (argc == 7 && (!batch || !number(argv[5], &start) || !number(argv[6], &length) ||
-                      !length || start + length > RF5_SIZE)) goto usage;
+                      !length || start + length > capacity)) goto usage;
     if (!strcmp(argv[3], "378")) port = 0x378;
     else if (!strcmp(argv[3], "278")) port = 0x278;
     else if (!strcmp(argv[3], "3BC")) port = 0x3bc;
@@ -87,7 +94,7 @@ int main(int argc, char **argv)
                         argc >= 5 ? config[1] : NULL)) {
         puts("Configuration, ID or socket check failed"); return 1;
     }
-    rc = pp_batch_transfer(image, action, &a, start, length);
+    rc = pp_batch_transfer(image, action, &a, start, length, intelligent);
     pp_batch_end(rc == 1);
     if (rc < 0) printf("Requires erase at %04X\n", a);
     else if (!rc) printf("%s at %04X\n", action == 1 ? "Verify mismatch" : "Operation failed", a);
@@ -104,6 +111,6 @@ int main(int argc, char **argv)
     return rc;
 usage:
     puts("Usage: PICRF5 RRF5|VRF5|WRF5 image.bin 378|278|3BC [PICPROG.LIB]");
-    puts("       PICRF5 READ|VERIFY|WRITE|OVERWRITE|CHECK image.bin base PICPROG.LIB [start length]");
+    puts("       PICRF5 READ|VERIFY|WRITE|OVERWRITE|CHECK image.bin base PICPROG.LIB [start length [profile]]");
     return 2;
 }

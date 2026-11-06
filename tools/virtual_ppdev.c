@@ -17,18 +17,22 @@ static struct stat target;
 static int configured, echo_de;
 static unsigned char scratch[2];
 static unsigned char *chip, reg[16];
+static unsigned capacity;
+static int pulse_fault, empty_socket;
 static int device_phase;
 static unsigned drop_pulses; /* Optional fault injection; counts qualified pulses only. */
 static unsigned address(void) {
-    return reg[2] | (reg[3] << 4) | (reg[13] << 8);
+    return reg[2] | (reg[3] << 4) | (reg[13] << 8) | ((reg[14] & 3) << 12);
 }
 static void latch(unsigned char bus) {
     unsigned index = bus & 15, value = bus >> 4;
-    if (chip && device_phase && index == 14 && reg[14] == 8 && value == 12 &&
+    if (chip && device_phase && index == 14 && (reg[14] & 12) == 8 && (value & 12) == 12 && (reg[14] & 3) == (value & 3) &&
         reg[7] == 4 && reg[6] == 2) {
         // The virtual adapter supplies a nominal RF5 pulse. The DOS
         // transport profile's real socket voltages/timing are not reused.
-        if (drop_pulses) --drop_pulses;
+        if (pulse_fault) { /* Hardware status fault, no successful pulse. */ }
+        else if (drop_pulses) --drop_pulses;
+        else if (capacity > RF5_BYTES) chip[address() & (capacity-1)] &= reg[0] | (reg[1] << 4);
         else rf5_program_pulse(chip, address(), reg[0] | (reg[1] << 4), true, true, RF5_PROGRAM_US);
     }
     reg[index] = value;
@@ -69,12 +73,15 @@ __attribute__((constructor)) static void setup(void) {
     if (image && *image) {
         int fd = open(image, O_RDWR | O_NOFOLLOW);
         struct stat st;
-        if (fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || st.st_size != RF5_BYTES ||
-            (chip = mmap(NULL, RF5_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
-            fprintf(stderr, "RF5 requires a writable regular 2048-byte image\n"); _exit(2);
+        if (fd < 0 || fstat(fd, &st) || !S_ISREG(st.st_mode) || (st.st_size != RF5_BYTES && st.st_size != 8192 && st.st_size != 16384) ||
+            (chip = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
+            fprintf(stderr, "RF5 requires a writable regular 2048-, 8192- or 16384-byte image\n"); _exit(2);
         }
+        capacity = st.st_size;
         close(fd);
     }
+    empty_socket = getenv("PP_EMPTY_SOCKET") && atoi(getenv("PP_EMPTY_SOCKET"));
+    pulse_fault = getenv("PP_PULSE_FAULT") && atoi(getenv("PP_PULSE_FAULT"));
     if (getenv("PP_DROP_PULSES")) drop_pulses = strtoul(getenv("PP_DROP_PULSES"), NULL, 10);
     configured = 1;
     return;
@@ -108,10 +115,13 @@ int ioctl(int fd, unsigned long request, unsigned long arg) {
             *v = (*v & 15) | scratch[data - 13];
         if (chip) {
             if (data == 15) device_phase = 1;
-            if (device_phase && data == 4 && reg[7] == 4) *v &= ~0x10;
+            if (device_phase && data == 4 && reg[7] == 4)
+                *v = (*v & ~0x10) | (pulse_fault ? 0x10 : 0);
             if (device_phase && (data == 8 || data == 9)) {
                 uint8_t byte = 0xff;
-                rf5_read(chip, address(), false, reg[6] != 4, &byte);
+                if (empty_socket) byte = reg[0] | (reg[1] << 4);
+                else if (capacity > RF5_BYTES && reg[6] == 4) byte = chip[address() & (capacity-1)];
+                else rf5_read(chip, address(), false, reg[6] != 4, &byte);
                 *v = (*v & 15) | (data == 8 ? (byte << 4) & 240 : byte & 240);
             }
         }
