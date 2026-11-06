@@ -16,3 +16,20 @@ build/virtual_ppdev.so: tools/virtual_ppdev.c tools/rf5_chip.h
 build/test-rf5: tests/rf5_socket.c tools/rf5_chip.h
 	mkdir -p build
 	$(CC) -Wall -Wextra -Werror -std=c99 $< -o $@
+
+# Match willem-v30's 8086 ABI and tiny .COM link model.
+DOSFLAGS = -0 -Md -ansi -O
+.PHONY: dos
+dos: build/dos/PICRF5.COM
+build/dos/%.o: src/%.c src/rf5_port.h
+	mkdir -p build/dos
+	bcc $(DOSFLAGS) -Isrc -c $< -o $@
+build/dos/dosio.o: third_party/willem-v30/src/dosio.asm
+	mkdir -p build/dos
+	nasm -f as86 $< -o $@
+build/dos/PICRF5.COM: build/dos/rf5_main.o build/dos/rf5_port.o build/dos/dosio.o
+	bcc -0 -Md -i -o $@ $^
+
+.PHONY: client-test
+client-test: dos lab
+	python3 tests/client-roundtrip.py

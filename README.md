@@ -1,6 +1,6 @@
 # Phyton PicProg+ for DOSRAVI
 
-An independent start on a DOS driver for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. The virtual programmer [reads and programs a persistent 2 KiB К573РФ5](docs/rf5.md) with the original DOS application. Physical chip access and programming voltages are unverified. This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
+An independent DOS driver and emulator for the discontinued **Phyton PicProg+** parallel-port programmer. The host link works: DOSRAVI can upload an 8086 DOS program, run it, and collect its output while leaving the parallel port to the program. Both our [PICRF5.COM DOS client](docs/dos-client.md) and the original DOS application [read and program the same persistent 2 KiB К573РФ5](docs/rf5.md). Physical chip access and programming voltages are unverified. This is a separate project from the [Willem driver](https://github.com/ddanila/willem-v30).
 
 ## Try the host-side check
 
